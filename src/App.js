@@ -20,7 +20,7 @@ function App() {
   const [text, setText] = useState("");
   const [matchingTerms, setMatchingTerms] = useState([]);
   const [searchMode, setSearchMode] = useState("semantic");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(""); //TODO: Efficiency: calculate the emedding when setting search term.
 
   useEffect(() => {
     const initializeWords = async () => {
@@ -36,6 +36,7 @@ function App() {
 
   const handleSearchTermChange = (e) => {
     setSearchTerm(e.target.value);
+    handleSearch(e);
   };
 
   const handleDelete = (term) => {
@@ -52,15 +53,16 @@ function App() {
     };
     setTerms([...terms, newTerm]);
     setText("");
+    handleSearch(e);
   };
 
   const handleSearch = async (e) => {
     e.preventDefault();
+    let newMatchingTerms = [];
     if (searchMode === "traditional") {
-      const newMatchingTerms = terms.filter((term) =>
+      newMatchingTerms = terms.filter((term) =>
         term.text.toLowerCase().includes(searchTerm.toLowerCase())
       );
-      setMatchingTerms(newMatchingTerms);
     } else if (searchMode === "semantic") {
       const searchTermEmbedding = await getEmbedding(searchTerm);
       const searchResults = terms.map((term) => {
@@ -74,13 +76,17 @@ function App() {
           similarity,
         };
       });
-      const newMatchingTerms = searchResults
+      newMatchingTerms = searchResults
         .sort((a, b) => {
           return b.similarity - a.similarity; // this is prob not right. How can i figure out which ones are closer?
         })
-        .slice(0, 3);
-      setMatchingTerms(newMatchingTerms);
+        .slice(0, 5);
     }
+    newMatchingTerms = newMatchingTerms.reduce((acc, curr, i) => {
+      acc[curr.text] = { rank: i + 1 };
+      return acc;
+    }, {});
+    setMatchingTerms(newMatchingTerms);
   };
 
   return (
@@ -89,42 +95,6 @@ function App() {
         <Typography variant="h6">Vector Embedding Demonstration</Typography>
       </AppBar>
 
-      <Box my={2}>
-        <Typography variant="body1">
-          Enter your text below (up to 140 characters):
-        </Typography>
-
-        <form onSubmit={handleNewStrSubmission}>
-          <TextField
-            multiline
-            fullWidth
-            rows={4}
-            inputProps={{ maxLength: 140 }}
-            value={text}
-            onChange={handleInputChange}
-          />
-
-          <Box mt={2}>
-            <Button variant="contained" type="submit">
-              Add String
-            </Button>
-          </Box>
-        </form>
-      </Box>
-
-      <Box my={2}>
-        <Typography variant="body1">My Phrases</Typography>
-        <Stack direction="row" spacing={1} flexWrap="wrap">
-          {terms.map((term, i) => (
-            <Chip
-              key={i}
-              label={term.text}
-              onDelete={() => handleDelete(term)}
-              variant="outlined"
-            />
-          ))}
-        </Stack>
-      </Box>
       <Box my={2}>
         <Typography variant="body1">Search:</Typography>
         <form onSubmit={handleSearch}>
@@ -140,24 +110,83 @@ function App() {
               exclusive
               onChange={(e, newMode) => setSearchMode(newMode)}
             >
-              <ToggleButton value="traditional">Traditional</ToggleButton>
-              <ToggleButton value="semantic">Semantic</ToggleButton>
+              <ToggleButton
+                value="traditional"
+                onClick={() => {
+                  setSearchMode("traditional");
+                  handleSearch();
+                }}
+              >
+                Regular Search
+              </ToggleButton>
+              <ToggleButton
+                value="semantic"
+                onClick={() => {
+                  setSearchMode("semantic");
+                  handleSearch();
+                }}
+              >
+                Search By Meaning
+              </ToggleButton>
             </ToggleButtonGroup>
-          </Box>
-
-          <Box my={2}>
-            <Button variant="outlined" type={"submit"}>
-              Search
-            </Button>
           </Box>
         </form>
       </Box>
 
-      <Box my={2}>
+      {/* <Box my={2}>
         <Typography variant="body1">Results:</Typography>
         {matchingTerms.map((term, i) => (
-          <Chip key={i} label={term.text} variant="outlined" />
+          <Chip
+            key={i}
+            label={term.text}
+            variant="outlined"
+            style={{ backgroundColor: "green", color: "white" }}
+          />
         ))}
+      </Box> */}
+
+      <Box my={2}>
+        <Typography variant="body1">Example Words & Ideas</Typography>
+        <Stack direction="row" spacing={1} flexWrap="wrap">
+          {terms.map((term, i) => {
+            const isMatching = searchTerm.length && matchingTerms[term.text];
+            return (
+              <Chip
+                key={i}
+                label={
+                  term.text +
+                  (isMatching ? ` (${matchingTerms[term.text].rank})` : "")
+                }
+                onDelete={() => handleDelete(term)}
+                variant="outlined"
+                style={{
+                  backgroundColor: isMatching ? "green" : "red",
+                  color: "white",
+                }}
+              />
+            );
+          })}
+        </Stack>
+      </Box>
+
+      <Box my={2}>
+        <Typography variant="body1">
+          Enter your own words and sentences here:
+        </Typography>
+
+        <form onSubmit={handleNewStrSubmission}>
+          <TextField
+            inputProps={{ maxLength: 140 }}
+            value={text}
+            onChange={handleInputChange}
+          />
+
+          <Box mt={2}>
+            <Button variant="contained" type="submit">
+              Add String
+            </Button>
+          </Box>
+        </form>
       </Box>
     </Container>
   );

@@ -1,6 +1,6 @@
 import axios from "axios";
 import { get } from "lodash";
-
+import sampleTerms from "./sampleTerms.json";
 export function cosineSimilarity(embedding1, embedding2) {
   let dotProduct = 0;
   let norm1 = 0;
@@ -73,7 +73,8 @@ export const words = [
   "bike", // similar
 ];
 
-export const getWords = async () => {
+export const getWords = async (fakeIt = true) => {
+  if (fakeIt) return sampleTerms;
   const embeddings = await Promise.all(words.map((word) => getEmbedding(word)));
   const wordsWithEmbeddings = words.map((word, i) => {
     return {
@@ -97,7 +98,7 @@ export const getEmbedding = async (str) => {
     {
       headers: {
         Authorization:
-          "Bearer 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",
+          "Bearer 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",
         "Content-Type": "application/json",
       },
     }
