@@ -1,6 +1,8 @@
 import axios from "axios";
 import { get } from "lodash";
 import sampleTerms from "./sampleTerms.json";
+import sampleJokes from "./sampleJokes.json";
+
 export function cosineSimilarity(embedding1, embedding2) {
   let dotProduct = 0;
   let norm1 = 0;
@@ -73,36 +75,45 @@ export const words = [
   "bike", // similar
 ];
 
-export const getWords = async (fakeIt = true) => {
-  if (fakeIt) return sampleTerms;
-  const embeddings = await Promise.all(words.map((word) => getEmbedding(word)));
-  const wordsWithEmbeddings = words.map((word, i) => {
+const jokes = [
+  "Why do barbers make the best bank robbers? Because they know all the shortcuts!", // funny, standalone
+  "Man, I ain't seen a traffic jam like this since my grandma tried to parallel park!", // funny, standalone
+  "Every time I try to eat healthy, a chocolate bar looks at me and snickers.", // funny, similar to the next
+  "Diet tip: If you think you're hungry, you might just be thirsty. Or bored. Or maybe you just saw a pizza commercial.", // funny, similar to the previous
+  "Did you hear about the claustrophobic astronaut? He just needed a little space.", // funny, standalone
+  "Why did the scarecrow win an award? Because he was outstanding in his field!", // funny, similar to the next
+  "If you see a crime at an Apple Store, does that make you an iWitness?", // funny, standalone
+  "I told my wife she should embrace her mistakes. She gave me a hug.", // funny, similar to the next
+  "My friend wants to become an archaeologist, but I tried to put him off. You know how upset he'll be when he realizes his career is in ruins?", // funny, standalone
+  "Every time I see a limo, I wonder if it's just a regular car taking its time.", // funny, similar to the next
+  "Why did the bicycle fall over? It was two-tired.", // funny, standalone
+  "Man, my ceiling isn’t the best, but it’s up there.", // funny, similar to the previous
+  "They say money talks, but mine only ever says 'Goodbye!'", // funny, standalone
+  "You ever notice how pickles are just cucumbers that went through a tough time?", // funny, similar to the next
+  "Being an adult is like trying to fold a fitted sheet.", // funny, standalone
+];
+
+export const getSampleTerms = async (fakeIt = true) => {
+  if (fakeIt) return sampleJokes;
+  const embeddings = await getEmbeddings(jokes);
+  const termsWithEmbeddings = jokes.map((str, i) => {
     return {
-      text: word,
+      text: str,
       embedding: embeddings[i],
     };
   });
-  return wordsWithEmbeddings;
+  console.log(termsWithEmbeddings);
+  return termsWithEmbeddings;
 };
 
-export const getEmbedding = async (str) => {
-  const model = "text-embedding-ada-002";
+export const getEmbeddings = async (strs) => {
+  const isArr = Array.isArray(strs);
   const response = await axios.post(
-    "https://api.openai.com/v1/embeddings",
+    `${process.env.REACT_APP_RAP_CLOUDS_SERVER_URL}/getEmbeddings`,
     {
-      model,
-      input: str,
-      max_tokens: 64,
-      // n: Math.ceil(terms.length * 0.25), // Get the top 25% of matches
-    },
-    {
-      headers: {
-        Authorization:
-          "Bearer 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",
-        "Content-Type": "application/json",
-      },
+      strCollection: typeof isArr ? strs : [strs],
     }
   );
-  const embedding = get(response, "data.data[0].embedding", [0]);
-  return embedding;
+  const embeddings = get(response, "data.embeddings", [[0]]);
+  return embeddings;
 };

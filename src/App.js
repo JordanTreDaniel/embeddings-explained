@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useState, useEffect } from "react";
+import { useDebounce } from "@uidotdev/usehooks";
 import {
   Container,
   Box,
@@ -13,18 +14,19 @@ import {
   ToggleButtonGroup,
 } from "@mui/material";
 import "./App.css";
-import { getDistAndSimilarity, getWords, getEmbedding } from "./utils";
+import { getDistAndSimilarity, getSampleTerms, getEmbeddings } from "./utils";
 
 function App() {
   const [terms, setTerms] = useState([]);
   const [text, setText] = useState("");
   const [matchingTerms, setMatchingTerms] = useState([]);
   const [searchMode, setSearchMode] = useState("semantic");
-  const [searchTerm, setSearchTerm] = useState(""); //TODO: Efficiency: calculate the emedding when setting search term.
+  const [searchTerm, setSearchTerm] = useState({ text: "", embedding: [0] }); //TODO: Efficiency: calculate the emedding when setting search term.
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   useEffect(() => {
     const initializeWords = async () => {
-      const words = await getWords();
+      const words = await getSampleTerms();
       setTerms(words);
     };
     initializeWords();
@@ -34,38 +36,66 @@ function App() {
     setText(e.target.value);
   };
 
-  const handleSearchTermChange = (e) => {
-    setSearchTerm(e.target.value);
-    handleSearch(e);
+  const handleSetSearchMode = (mode) => {
+    if (!["traditional", "semantic"].includes(mode)) mode = "semantic";
+    setSearchMode(mode);
+    if (mode === "semantic") updateSearchTermEmbedding();
+  };
+
+  const handleSearchTermChange = async (e) => {
+    e.preventDefault();
+    const newSearchText = e.target.value;
+    let newSearchEmbedding = [0];
+    console.log({ newSearchText });
+    await setSearchTerm({ text: newSearchText, embedding: [0] });
+    if (newSearchText.length && searchMode === "semantic") {
+      newSearchEmbedding = await updateSearchTermEmbedding(newSearchText);
+    }
+    handleSearch({ text: newSearchText, embedding: newSearchEmbedding });
+  };
+
+  const updateSearchTermEmbedding = async (newSearchText) => {
+    const [embedding] = await getEmbeddings(newSearchText);
+    setSearchTerm({ text: newSearchText, embedding });
+    handleSearch({ text: newSearchText, embedding });
+    return embedding;
   };
 
   const handleDelete = (term) => {
     const newTerms = terms.filter((t) => t !== term);
     setTerms(newTerms);
+    handleSearch(searchTerm, newTerms);
   };
 
   const handleNewStrSubmission = async (e) => {
     e.preventDefault();
-    const embedding = await getEmbedding(text);
+    const [embedding] = await getEmbeddings(text);
     const newTerm = {
       text,
       embedding,
     };
-    setTerms([...terms, newTerm]);
+    const newTerms = [...terms, newTerm];
+    setTerms(newTerms);
     setText("");
-    handleSearch(e);
+    handleSearch(searchTerm, newTerms);
   };
 
-  const handleSearch = async (e) => {
-    e.preventDefault();
+  const handleSearch = async (
+    _searchTerm = debouncedSearchTerm,
+    _terms = terms
+  ) => {
     let newMatchingTerms = [];
+    console.log({ _searchTerm, _terms, searchMode });
+    if (!_searchTerm.text?.length) newMatchingTerms = [];
+    // await new Promise((resolve) => setTimeout(resolve, 1000));
+    console.log("searching", _searchTerm.text.toLowerCase());
     if (searchMode === "traditional") {
-      newMatchingTerms = terms.filter((term) =>
-        term.text.toLowerCase().includes(searchTerm.toLowerCase())
+      newMatchingTerms = _terms.filter((term) =>
+        term.text.toLowerCase().includes(_searchTerm.text.toLowerCase())
       );
     } else if (searchMode === "semantic") {
-      const searchTermEmbedding = await getEmbedding(searchTerm);
-      const searchResults = terms.map((term) => {
+      const searchTermEmbedding = _searchTerm.embedding;
+      const searchResults = _terms.map((term) => {
         const { distance, similarity } = getDistAndSimilarity(
           searchTermEmbedding,
           term.embedding
@@ -97,10 +127,10 @@ function App() {
 
       <Box my={2}>
         <Typography variant="body1">Search:</Typography>
-        <form onSubmit={handleSearch}>
+        <form onSubmit={updateSearchTermEmbedding}>
           <TextField
             fullWidth
-            value={searchTerm}
+            value={searchTerm.text}
             onChange={handleSearchTermChange}
           />
 
@@ -108,26 +138,14 @@ function App() {
             <ToggleButtonGroup
               value={searchMode}
               exclusive
-              onChange={(e, newMode) => setSearchMode(newMode)}
+              onChange={(e, newMode) => {
+                console.log({ newMode });
+                handleSetSearchMode(newMode);
+                handleSearch(searchTerm);
+              }}
             >
-              <ToggleButton
-                value="traditional"
-                onClick={() => {
-                  setSearchMode("traditional");
-                  handleSearch();
-                }}
-              >
-                Regular Search
-              </ToggleButton>
-              <ToggleButton
-                value="semantic"
-                onClick={() => {
-                  setSearchMode("semantic");
-                  handleSearch();
-                }}
-              >
-                Search By Meaning
-              </ToggleButton>
+              <ToggleButton value="traditional">Regular Search</ToggleButton>
+              <ToggleButton value="semantic">Search By Meaning</ToggleButton>
             </ToggleButtonGroup>
           </Box>
         </form>
@@ -149,7 +167,8 @@ function App() {
         <Typography variant="body1">Example Words & Ideas</Typography>
         <Stack direction="row" spacing={1} flexWrap="wrap">
           {terms.map((term, i) => {
-            const isMatching = searchTerm.length && matchingTerms[term.text];
+            const isMatching =
+              searchTerm.text.length && matchingTerms[term.text];
             return (
               <Chip
                 key={i}
