@@ -14,15 +14,16 @@ import {
   ToggleButtonGroup,
 } from "@mui/material";
 import "./App.css";
-import { getDistAndSimilarity, getSampleTerms, getEmbeddings } from "./utils";
+import { getSampleTerms, getEmbeddings } from "./utils";
+import { useSearch, useSearchTerm } from "./hooks";
 
 function App() {
   const [terms, setTerms] = useState([]);
   const [text, setText] = useState("");
-  const [matchingTerms, setMatchingTerms] = useState([]);
   const [searchMode, setSearchMode] = useState("semantic");
-  const [searchTerm, setSearchTerm] = useState({ text: "", embedding: [0] }); //TODO: Efficiency: calculate the emedding when setting search term.
+  const [searchTerm, setSearchTerm] = useSearchTerm("", searchMode);
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  const matchingTerms = useSearch(debouncedSearchTerm, terms, searchMode);
 
   useEffect(() => {
     const initializeWords = async () => {
@@ -39,32 +40,17 @@ function App() {
   const handleSetSearchMode = (mode) => {
     if (!["traditional", "semantic"].includes(mode)) mode = "semantic";
     setSearchMode(mode);
-    if (mode === "semantic") updateSearchTermEmbedding();
   };
 
-  const handleSearchTermChange = async (e) => {
+  const handleSearchTermChange = (e) => {
     e.preventDefault();
     const newSearchText = e.target.value;
-    let newSearchEmbedding = [0];
-    console.log({ newSearchText });
-    await setSearchTerm({ text: newSearchText, embedding: [0] });
-    if (newSearchText.length && searchMode === "semantic") {
-      newSearchEmbedding = await updateSearchTermEmbedding(newSearchText);
-    }
-    handleSearch({ text: newSearchText, embedding: newSearchEmbedding });
-  };
-
-  const updateSearchTermEmbedding = async (newSearchText) => {
-    const [embedding] = await getEmbeddings(newSearchText);
-    setSearchTerm({ text: newSearchText, embedding });
-    handleSearch({ text: newSearchText, embedding });
-    return embedding;
+    setSearchTerm(newSearchText);
   };
 
   const handleDelete = (term) => {
     const newTerms = terms.filter((t) => t !== term);
     setTerms(newTerms);
-    handleSearch(searchTerm, newTerms);
   };
 
   const handleNewStrSubmission = async (e) => {
@@ -77,46 +63,18 @@ function App() {
     const newTerms = [...terms, newTerm];
     setTerms(newTerms);
     setText("");
-    handleSearch(searchTerm, newTerms);
   };
 
-  const handleSearch = async (
-    _searchTerm = debouncedSearchTerm,
-    _terms = terms
-  ) => {
-    let newMatchingTerms = [];
-    console.log({ _searchTerm, _terms, searchMode });
-    if (!_searchTerm.text?.length) newMatchingTerms = [];
-    // await new Promise((resolve) => setTimeout(resolve, 1000));
-    console.log("searching", _searchTerm.text.toLowerCase());
-    if (searchMode === "traditional") {
-      newMatchingTerms = _terms.filter((term) =>
-        term.text.toLowerCase().includes(_searchTerm.text.toLowerCase())
-      );
-    } else if (searchMode === "semantic") {
-      const searchTermEmbedding = _searchTerm.embedding;
-      const searchResults = _terms.map((term) => {
-        const { distance, similarity } = getDistAndSimilarity(
-          searchTermEmbedding,
-          term.embedding
-        );
-        return {
-          ...term,
-          distance,
-          similarity,
-        };
-      });
-      newMatchingTerms = searchResults
-        .sort((a, b) => {
-          return b.similarity - a.similarity; // this is prob not right. How can i figure out which ones are closer?
-        })
-        .slice(0, 5);
+  const handleSearchKeyDown = (e) => {
+    if (e.key === "Enter") {
+      handleSearchTermChange(e);
     }
-    newMatchingTerms = newMatchingTerms.reduce((acc, curr, i) => {
-      acc[curr.text] = { rank: i + 1 };
-      return acc;
-    }, {});
-    setMatchingTerms(newMatchingTerms);
+  };
+
+  const handleTextKeyDown = (e) => {
+    if (e.key === "Enter") {
+      handleNewStrSubmission(e);
+    }
   };
 
   return (
@@ -127,28 +85,26 @@ function App() {
 
       <Box my={2}>
         <Typography variant="body1">Search:</Typography>
-        <form onSubmit={updateSearchTermEmbedding}>
-          <TextField
-            fullWidth
-            value={searchTerm.text}
-            onChange={handleSearchTermChange}
-          />
+        <TextField
+          fullWidth
+          value={searchTerm.text}
+          onChange={handleSearchTermChange}
+          onKeyDown={handleSearchKeyDown}
+        />
 
-          <Box my={2}>
-            <ToggleButtonGroup
-              value={searchMode}
-              exclusive
-              onChange={(e, newMode) => {
-                console.log({ newMode });
-                handleSetSearchMode(newMode);
-                handleSearch(searchTerm);
-              }}
-            >
-              <ToggleButton value="traditional">Regular Search</ToggleButton>
-              <ToggleButton value="semantic">Search By Meaning</ToggleButton>
-            </ToggleButtonGroup>
-          </Box>
-        </form>
+        <Box my={2}>
+          <ToggleButtonGroup
+            value={searchMode}
+            exclusive
+            onChange={(e, newMode) => {
+              console.log({ newMode });
+              handleSetSearchMode(newMode);
+            }}
+          >
+            <ToggleButton value="traditional">Regular Search</ToggleButton>
+            <ToggleButton value="semantic">Search By Meaning</ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
       </Box>
 
       {/* <Box my={2}>
@@ -193,19 +149,18 @@ function App() {
           Enter your own words and sentences here:
         </Typography>
 
-        <form onSubmit={handleNewStrSubmission}>
-          <TextField
-            inputProps={{ maxLength: 140 }}
-            value={text}
-            onChange={handleInputChange}
-          />
+        <TextField
+          inputProps={{ maxLength: 140 }}
+          value={text}
+          onChange={handleInputChange}
+          onKeyDown={handleTextKeyDown}
+        />
 
-          <Box mt={2}>
-            <Button variant="contained" type="submit">
-              Add String
-            </Button>
-          </Box>
-        </form>
+        <Box mt={2}>
+          <Button variant="contained" type="submit">
+            Add String
+          </Button>
+        </Box>
       </Box>
     </Container>
   );
