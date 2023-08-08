@@ -22,7 +22,7 @@ function App() {
   const [text, setText] = useState("");
   const [searchMode, setSearchMode] = useState("semantic");
   const [searchTerm, setSearchTerm] = useSearchTerm("", searchMode);
-  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  const debouncedSearchTerm = useDebounce(searchTerm, 2000); //TODO: This doesn't work
   const matchingTerms = useSearch(debouncedSearchTerm, terms, searchMode);
 
   useEffect(() => {
